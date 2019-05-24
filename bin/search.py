@@ -13,12 +13,24 @@ import tempfile
 import shutil
 import subprocess
 import tarfile
+import warnings
 
 import datafile
 import astro_utils.calendar
 
 import config.processing
+import pipeline_utils
 
+
+def warn_to_stdout(message, category, filename, lineno, file=None, line=None):
+    """A function to replace warnings.showwarning so that warnings are
+        printed to STDOUT instead of STDERR.
+        Usage: warnings.showwarning = warn_to_stdout
+    """
+
+    sys.stdout.write(warnings.formatwarning(message,category,filename,lineno))
+
+warnings.showwarning = warn_to_stdout
 
 def get_datafns():
     """Get data filenames from command line or environment variable. 
@@ -124,11 +136,11 @@ def set_up():
     print "Local working directory:", workdir
     print "Local results directory:", resultsdir
     print "When finished results will be copied to: %s" % outdir
-
+    
     # Copy data files locally
     for fn in fns:
         system_call("rsync -auvl %s %s" % (fn, workdir))
-    fns = [os.path.join(workdir, os.path.split(fn)[-1]) for fn in fns]
+    fns = sorted([os.path.split(fn)[-1] for fn in fns])
 
     return fns, workdir, resultsdir, outdir
 
@@ -164,21 +176,37 @@ def copy_zaplist(fns, workdir):
     # Try to find custom zaplist for this MJD
     customzapfns.append("%s.%s.all.zaplist" % (parsed['projid'], parsed['date']))
 
-    zaptar = tarfile.open(os.path.join(config.processing.zaplistdir, \
-                                        "zaplists.tar.gz"), mode='r')
+    zaptar_fn = pipeline_utils.get_zaplist_tarball(no_check=True)
+    zaptar = tarfile.open(zaptar_fn, mode='r')
+
     members = zaptar.getmembers()
     for customzapfn in customzapfns:
+        radar_samples_fn = os.path.splitext(customzapfn)[0] + '_merged_radar_samples.txt'
         matches = [mem for mem in members \
                     if mem.name.endswith(customzapfn)]
+        radar_matches = [mem for mem in members \
+                          if mem.name.endswith(radar_samples_fn)]
         if matches:
             ti = matches[0] # The first TarInfo object found 
                             # that matches the file name
+
             # Write custom zaplist to workdir
             localfn = os.path.join(workdir, customzapfn)
             f = open(localfn, 'w')
             f.write(zaptar.extractfile(ti).read())
             f.close()
             print "Copied custom zaplist: %s" % customzapfn
+
+            if radar_matches:
+                radar_ti = radar_matches[0]
+
+                # Write radar samples list to workdir
+                radar_localfn = os.path.join(workdir, radar_samples_fn)
+                f = open(radar_localfn, 'w')
+                f.write(zaptar.extractfile(radar_ti).read())
+                f.close()
+                print "Copied radar samples list: %s" % radar_samples_fn
+
             break
         else:
             # The member we searched for doesn't exist, try next one

@@ -12,7 +12,7 @@ import re
 import types
 
 
-dmhit_re = re.compile(r'^ *DM= *(?P<dm>[^ ]*) *SNR= *(?P<snr>[^ ]*) *\** *$')
+dmhit_re = re.compile(r'^ *DM= *(?P<dm>[^ ]*) *SNR= *(?P<snr>[^ ]*) *Sigma= *(?P<sigma>[^ ]*) *\** *$')
 candinfo_re = re.compile(r'^(?P<accelfile>.*):(?P<candnum>\d*) *(?P<dm>[^ ]*)' \
                          r' *(?P<snr>[^ ]*) *(?P<sigma>[^ ]*) *(?P<numharm>[^ ]*)' \
                          r' *(?P<ipow>[^ ]*) *(?P<cpow>[^ ]*) *(?P<period>[^ ]*)' \
@@ -37,8 +37,9 @@ class AccelCand(object):
         self.r = float(r)
         self.z = float(z)
         self.dmhits = []
+        self.search_type = "fft"
 
-    def add_dmhit(self, dm, snr):
+    def add_dmhit(self, dm, snr, sigma):
         self.dmhits.append(DMHit(dm, snr))
 
     def __str__(self):

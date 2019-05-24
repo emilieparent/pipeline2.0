@@ -10,18 +10,23 @@ import os
 import warnings
 import sys
 
-import pyfits
 import numpy as np
 import psr_utils
 from astro_utils import protractor
 from astro_utils import calendar
+
+from memory_profiler import profile
+
+try:
+    import astropy.io.fits as pyfits
+except ImportError:
+    import pyfits
 
 # Regular expression for parsing DATE-OBS card's format.
 date_obs_re = re.compile(r"^(?P<year>[0-9]{4})-(?P<month>[0-9]{2})-" \
                             "(?P<day>[0-9]{2})T(?P<hour>[0-9]{2}):" \
                             "(?P<min>[0-9]{2}):(?P<sec>[0-9]{2}" \
                             "(?:\.[0-9]+)?)$")
-
 class SpectraInfo:
     def __init__(self, filenames, verbose=False):
         self.filenames = filenames
@@ -52,21 +57,22 @@ class SpectraInfo:
             
             # Open the PSRFITS file
             hdus = pyfits.open(fn, mode='readonly', checksum=False)
-            self.hdus = hdus
+            #self.hdus = hdus
+            #self.num_ifs = hdus[1].header['NUMIFS']
 
             if ii==0:
                 self.hdu_names = [hdu.name for hdu in hdus]
 
             primary = hdus['PRIMARY'].header
 
-            if primary.has_key('IBEAM'):
+            if 'IBEAM' in primary:
                 self.beam_id = primary['IBEAM']
-            elif hdus[1].header.has_key('BEAM'):
+            elif 'BEAM' in primary:
                 self.beam_id = hdus[1].header['BEAM']
             else:
                 self.beam_id = None
 
-            if primary.has_key('TELESCOP'):
+            if 'TELESCOP' in primary:
                 telescope = primary['TELESCOP']
                 # Quick fix for MockSpec data...
                 if telescope == "ARECIBO 305m":
@@ -95,7 +101,7 @@ class SpectraInfo:
             self.header_version = primary['HDRVER']
 
             # CHAN_DM card is not in earlier versions of PSRFITS
-            if primary.has_key('CHAN_DM'):
+            if 'CHAN_DM' in primary:
                 self.chan_dm = primary['CHAN_DM']
             else:
                 self.chan_dm = 0.0

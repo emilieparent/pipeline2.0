@@ -21,11 +21,12 @@ def main():
                 # files were successfully downloaded
                 delay=1
                 num_short_delays = 0
-            elif num_short_delays <= 8:
+            #elif num_short_delays <= 8:
+            #elif num_short_delays <= 4:
                 # No files successfully download this iteration
                 # Increase sleep time
-                delay = min((delay*2, 4))
-                num_short_delays += 1
+            #    delay = min((delay*2, 4))
+            #    num_short_delays += 1
             else:
                 delay = min((delay*2,32))
         except Exception, e:

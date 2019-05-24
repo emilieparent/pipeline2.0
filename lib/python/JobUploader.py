@@ -87,17 +87,26 @@ def upload_results(job_submit):
             None
     """
     print "Attempting to upload results"
-    print "\tJob ID: %d, Job submission ID: %d" % \
-            (job_submit['job_id'], job_submit['id'])
+    print "\tJob ID: %d, Job submission ID: %d\n\tOutput Dir: %s" % \
+            (job_submit['job_id'], job_submit['id'], job_submit['output_dir'])
     if debug.UPLOAD:
         upload.upload_timing_summary = {}
         starttime = time.time()
     try:
         # Connect to the DB
         db = database.Database('default', autocommit=False)
+
         # Prepare for upload
         dir = job_submit['output_dir']
+        pdm_dir = os.path.join(dir,"zerodm") if config.upload.upload_zerodm_periodicity else dir
+        sp_dir = os.path.join(dir,"zerodm") if config.upload.upload_zerodm_singlepulse else dir
+
         if not os.path.exists(dir) or not os.listdir(dir):
+            errormsg = 'ERROR: Results directory, %s, does not exist or is empty for job_id=%d' %\
+                       (dir, job_submit['job_id'])
+            raise upload.UploadNonFatalError(errormsg)
+        elif len(os.listdir(dir)) == 1 and os.listdir(dir)[0] == 'zerodm' \
+                                       and not os.listdir(os.path.join(dir,os.listdir(dir)[0])):
             errormsg = 'ERROR: Results directory, %s, does not exist or is empty for job_id=%d' %\
                        (dir, job_submit['job_id'])
             raise upload.UploadNonFatalError(errormsg)
@@ -117,12 +126,14 @@ def upload_results(job_submit):
         print "\tHeader parsed."
 
         rat_inst_id_cache = ratings2.utils.RatingInstanceIDCache(dbname='common3')
-        cands, tempdir = candidates.get_candidates(version_number, dir, \
+        #rat_inst_id_cache = ratings2.utils.RatingInstanceIDCache(dbname='MichellePalfaCands')
+        cands, tempdir = candidates.get_candidates(version_number, pdm_dir, \
                                                    timestamp_mjd=data.timestamp_mjd, \
                                                    inst_cache=rat_inst_id_cache)
         print "\tPeriodicity candidates parsed."
-        sp_cands = sp_candidates.get_spcandidates(version_number, dir, \
-                                                  timestamp_mjd=data.timestamp_mjd)
+        sp_cands, tempdir_sp = sp_candidates.get_spcandidates(version_number, sp_dir, \
+                                                              timestamp_mjd=data.timestamp_mjd, \
+                                                              inst_cache=rat_inst_id_cache)
         print "\tSingle pulse candidates parsed."
 
         for c in (cands + sp_cands):
@@ -131,7 +142,7 @@ def upload_results(job_submit):
                                              data.beam_id, \
                                              data.obstype, \
                                              version_number, \
-                                             dir)
+                                             pdm_dir, sp_dir)
         print "\tDiagnostics parsed."
         
         if debug.UPLOAD: 
@@ -207,9 +218,11 @@ def upload_results(job_submit):
                 hdr.upload_FTP(cftp,db)
                 cftp.quit()
 
-            except CornellFTP.CornellFTPTimeout:
+            except (CornellFTP.CornellFTPTimeout, CornellFTP.CornellFTPError):
                 # Connection error during FTP upload. Reconnect and try again.
                 print "FTP connection lost. Reconnecting..."
+                exceptionmsgs = traceback.format_exception(*sys.exc_info())
+                print"".join(exceptionmsgs)
                 attempts += 1
                 try:
                     cftp.quit()
@@ -230,6 +243,8 @@ def upload_results(job_submit):
 
         # remove temporary dir for PFDs
         shutil.rmtree(tempdir)
+        # remove temporary dir for SPDs
+        shutil.rmtree(tempdir_sp)
 
         if attempts >= 5:
             errmsg = "FTP upload failed after %d connection failures!\n" % attempts
